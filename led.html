@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Three‑Screen LED Simulator</title>
+  <style>
+    :root{
+      --gap: 24px;            /* khoảng cách giữa 3 màn */
+      --bg: #0b0b10;          /* nền sân khấu */
+      --panel-bg:#000;        /* nền mỗi màn */
+      --radius: 10px;
+      --ui:#e5e7eb;           /* text */
+      --ui-dim:#9aa1a8;       /* text phụ */
+      --accent:#22c55e;       /* nút */
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--ui);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"}
+    .app{display:flex;flex-direction:column;height:100%;}
+
+    /* Thanh điều khiển */
+    .toolbar{
+      display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+      padding:12px 16px;border-bottom:1px solid #1f2937;background:#111827;position:sticky;top:0;z-index:5
+    }
+    .toolbar .group{display:flex;gap:8px;align-items:center}
+    .toolbar label{font-size:12px;color:var(--ui-dim)}
+    button,select,input[type="range"],input[type="number"]{
+      background:#0f172a;border:1px solid #273043;color:var(--ui);border-radius:8px;padding:8px 10px;font-size:14px
+    }
+    button{cursor:pointer}
+    button.primary{background:var(--accent);border-color:transparent;color:#041007;font-weight:700}
+    button.ghost{background:transparent}
+
+    /* Sân khấu */
+    .stage-wrap{display:flex;justify-content:center;align-items:center;flex:1;min-height:0;padding:16px}
+    .stage{
+      width: 3264px; /* Tổng chiều rộng 3 màn */
+      height: 1088px; /* Chiều cao chung */
+      display: flex;
+      gap: var(--gap);
+      transform-origin: center center;
+      transform: scale(0.5); /* Scale xuống để xem được toàn bộ */
+    }
+
+    /* 3 màn hình */
+    .panel{
+      position:relative;
+      background:var(--panel-bg);
+      border-radius:var(--radius);
+      overflow:hidden;
+      display:grid;
+      place-items:center;
+    }
+    #left, #right {
+      width: 640px; /* Kích thước 2 cánh */
+      height: 1088px;
+    }
+    #center {
+      width: 1984px; /* Kích thước màn giữa */
+      height: 1088px;
+    }
+    .panel video,.panel img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:none
+    }
+    .panel .hint{
+      position:absolute;
+      inset:auto 8px 8px 8px;
+      background:rgba(0,0,0,.45);
+      border:1px dashed #475569;
+      border-radius:8px;
+      color:#cbd5e1;
+      font-size:12px;
+      padding:8px;
+      text-align:center
+    }
+    .panel.dragover{outline:2px dashed #60a5fa;outline-offset:-6px}
+
+    /* nhãn L/C/R */
+    .badge{
+      position:absolute;
+      top:8px;
+      left:8px;
+      background:#111827;
+      border:1px solid #333c4a;
+      color:#cbd5e1;
+      font-size:12px;
+      border-radius:999px;
+      padding:4px 8px
+    }
+
+    /* footer nhỏ */
+    .help{
+      padding:8px 16px;
+      color:#9aa1a8;
+      font-size:12px;
+      border-top:1px solid #1f2937;
+      background:#0b1120
+    }
+
+    @media (max-width: 900px){
+      :root{--gap:12px}
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="toolbar">
+    <div class="group">
+      <button id="playAll" class="primary">▶︎ Play All</button>
+      <button id="pauseAll">⏸ Pause</button>
+      <button id="stopAll" class="ghost">⏹ Stop</button>
+      <button id="syncAll" class="ghost">🔄 Sync to Center</button>
+      <button id="fs">⛶ Fullscreen</button>
+    </div>
+    <div class="group">
+      <button id="zoomIn">+ Zoom In</button>
+      <button id="zoomOut">- Zoom Out</button>
+      <span id="zoomLevel">Zoom: 50%</span>
+    </div>
+    <div class="group">
+      <label>Gap <input id="gap" type="range" min="0" max="64" value="24"/></label>
+      <label>Fit
+        <select id="fitMode">
+          <option value="cover">Cover (đầy màn)</option>
+          <option value="contain">Contain (nguyên tỉ lệ)</option>
+          <option value="fill">Fill (kéo dãn)</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="muted" checked/> Muted</label>
+      <label><input type="checkbox" id="loop" checked/> Loop</label>
+    </div>
+  </div>
+
+  <div class="stage-wrap">
+    <div id="stage" class="stage">
+      <div class="panel" id="left">
+        <div class="badge">LEFT (640×1088)</div>
+        <video playsinline></video>
+        <img alt=""/>
+        <div class="hint">Kéo thả video/ảnh vào đây<br/>hoặc click để chọn file</div>
+      </div>
+      <div class="panel" id="center">
+        <div class="badge">CENTER (1984×1088)</div>
+        <video playsinline></video>
+        <img alt=""/>
+        <div class="hint">Kéo thả video/ảnh vào đây<br/>hoặc click để chọn file</div>
+      </div>
+      <div class="panel" id="right">
+        <div class="badge">RIGHT (640×1088)</div>
+        <video playsinline></video>
+        <img alt=""/>
+        <div class="hint">Kéo thả video/ảnh vào đây<br/>hoặc click để chọn file</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="help">Mẹo: Nhấn phím <b>Space</b> để Play/Pause tất cả, <b>F</b> để Fullscreen. Có thể đặt 3 video khác nhau hoặc cùng một video cắt sẵn. Fit=Cover cho cảm giác giống màn LED ngoài đời.</div>
+</div>
+
+<input id="filePicker" type="file" accept="video/*,image/*" hidden />
+
+<script>
+(function(){
+  const panels = ['left','center','right'].map(id => ({
+    id,
+    root: document.getElementById(id),
+    video: document.querySelector('#'+id+' video'),
+    img: document.querySelector('#'+id+' img'),
+    hint: document.querySelector('#'+id+' .hint')
+  }));
+
+  const fitSel = document.getElementById('fitMode');
+  const mutedCb = document.getElementById('muted');
+  const loopCb = document.getElementById('loop');
+  const picker = document.getElementById('filePicker');
+  const zoomLevel = document.getElementById('zoomLevel');
+  let currentPickTarget = null;
+  let currentZoom = 0.5;
+
+  function applyFit(mode){
+    panels.forEach(p=>{
+      p.video.style.objectFit = mode;
+      p.img.style.objectFit = mode;
+    });
+  }
+  fitSel.addEventListener('change', e=> applyFit(e.target.value));
+  applyFit(fitSel.value);
+
+  function setMutedLoop(){
+    panels.forEach(p=>{ p.video.muted = mutedCb.checked; p.video.loop = loopCb.checked; });
+  }
+  mutedCb.addEventListener('change', setMutedLoop);
+  loopCb.addEventListener('change', setMutedLoop);
+  setMutedLoop();
+
+  function loadFile(targetPanel, file){
+    const p = panels.find(x=>x.id===targetPanel);
+    if(!p || !file) return;
+    const url = URL.createObjectURL(file);
+    if(file.type.startsWith('video/')){
+      p.img.style.display='none';
+      p.video.src = url;
+      p.video.style.display='block';
+      p.hint.style.display='none';
+      p.video.onloadedmetadata=()=>{ p.video.currentTime=0; }
+      p.video.play().catch(()=>{});
+    }else if(file.type.startsWith('image/')){
+      p.video.pause();
+      p.video.removeAttribute('src');
+      p.video.load();
+      p.video.style.display='none';
+      p.img.src=url;
+      p.img.style.display='block';
+      p.hint.style.display='none';
+    }
+  }
+
+  // drag & drop + click-to-pick
+  panels.forEach(p=>{
+    p.root.addEventListener('dragover',e=>{e.preventDefault(); p.root.classList.add('dragover');});
+    p.root.addEventListener('dragleave',()=>p.root.classList.remove('dragover'));
+    p.root.addEventListener('drop',e=>{
+      e.preventDefault(); p.root.classList.remove('dragover');
+      const f = e.dataTransfer.files?.[0];
+      loadFile(p.id,f);
+    });
+    p.root.addEventListener('click',()=>{ currentPickTarget = p.id; picker.click(); });
+  });
+  picker.addEventListener('change', e=>{
+    const f = e.target.files?.[0];
+    if(currentPickTarget) loadFile(currentPickTarget, f);
+    picker.value = '';
+  });
+
+  // Play/Pause/Stop/Sync
+  const playAll = ()=> panels.forEach(p=>{ if(p.video.src){ p.video.play().catch(()=>{});} });
+  const pauseAll = ()=> panels.forEach(p=> p.video.pause());
+  const stopAll = ()=> panels.forEach(p=>{ p.video.pause(); if(p.video.src) p.video.currentTime = 0; });
+  const syncAll = ()=>{
+    const center = panels.find(p=>p.id==='center').video;
+    panels.forEach(p=>{ if(p.video.src){ try{ p.video.currentTime=center.currentTime || 0; }catch(e){} } });
+  }
+  document.getElementById('playAll').onclick = playAll;
+  document.getElementById('pauseAll').onclick = pauseAll;
+  document.getElementById('stopAll').onclick = stopAll;
+  document.getElementById('syncAll').onclick = syncAll;
+
+  // Zoom controls
+  function updateZoom() {
+    document.getElementById('stage').style.transform = `scale(${currentZoom})`;
+    zoomLevel.textContent = `Zoom: ${Math.round(currentZoom * 100)}%`;
+  }
+  
+  document.getElementById('zoomIn').onclick = () => {
+    currentZoom = Math.min(currentZoom + 0.1, 1);
+    updateZoom();
+  };
+  
+  document.getElementById('zoomOut').onclick = () => {
+    currentZoom = Math.max(currentZoom - 0.1, 0.2);
+    updateZoom();
+  };
+  
+  updateZoom();
+
+  // gap slider
+  document.getElementById('gap').addEventListener('input', e=>{
+    document.documentElement.style.setProperty('--gap', e.target.value+"px");
+  });
+
+  // fullscreen
+  document.getElementById('fs').onclick = ()=>{
+    const el = document.querySelector('.stage-wrap');
+    if(document.fullscreenElement){ document.exitFullscreen(); }
+    else{ el.requestFullscreen?.(); }
+  };
+
+  // keyboard
+  window.addEventListener('keydown', e=>{
+    if(e.code==='Space'){ e.preventDefault(); const anyPlaying = panels.some(p=>!p.video.paused); anyPlaying?pauseAll():playAll(); }
+    if(e.key==='f' || e.key==='F'){ document.getElementById('fs').click(); }
+    if(e.key==='+' || e.key==='='){ document.getElementById('zoomIn').click(); }
+    if(e.key==='-' || e.key==='_'){ document.getElementById('zoomOut').click(); }
+  });
+})();
+</script>
+</body>
+</html>
